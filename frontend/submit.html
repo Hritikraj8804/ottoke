@@ -19,9 +19,9 @@
   </nav>
 
   <div class="fixed bottom-4 left-4 right-4 md:hidden kawaii-glass flex justify-around py-3 z-50">
-      <a href="/" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-pink-500 transition"><span class="text-2xl mb-1">🎀</span>Feed</a>
-      <a href="/leaderboard" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-purple-500 transition"><span class="text-2xl mb-1">👑</span>Ranks</a>
-      <a href="/submit" class="flex flex-col items-center text-sm font-bold text-pink-500"><span class="text-2xl mb-1">📝</span>Post</a>
+      <a href="/" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-pink-500 transition"><img src="/icons/water_spit_icon_1775202991131.png" class="w-8 h-8 rounded-full mb-1 object-cover border border-gray-300 shadow-sm">Feed</a>
+      <a href="/leaderboard" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-purple-500 transition"><img src="/icons/chaebol_cash_icon_1775202965602.png" class="w-8 h-8 rounded-full mb-1 object-cover border border-gray-300 shadow-sm">Ranks</a>
+      <a href="/submit" class="flex flex-col items-center text-sm font-bold text-pink-500"><img src="/icons/kimchi_slap_icon_1775202932161.png" class="w-8 h-8 rounded-full mb-1 object-cover border border-pink-300 shadow-sm">Post</a>
   </div>
 
   <main class="max-w-2xl mx-auto mt-12 w-full">
@@ -33,11 +33,6 @@
       <div class="relative">
         <textarea id="content" class="w-full text-gray-700 p-6 h-48 focus:border-transparent transition resize-none font-medium text-lg leading-relaxed shadow-sm" placeholder="Tell us... I deleted the production database... 😭"></textarea>
         <div class="absolute bottom-4 right-4 text-xs font-black bg-pink-50 text-pink-400 px-3 py-1 rounded-full border border-pink-100 shadow-sm"><span id="char-count">0</span> / 500</div>
-      </div>
-      
-      <div class="mt-8 flex flex-col sm:flex-row gap-4 items-center bg-white/70 p-5 rounded-2xl border-2 border-purple-100 shadow-sm">
-        <label class="font-black text-purple-500 text-sm tracking-wide">ARE YOU HUMAN? 🤖<br><span class="text-xs text-gray-400">Prove it: 2 + 3 =</span></label>
-        <input type="number" id="captcha" class="w-full sm:max-w-[120px] text-center font-black text-xl text-pink-500" placeholder="?">
       </div>
       
       <button id="submit-btn" class="w-full mt-8 kawaii-btn btn-japan text-lg py-4 shadow-lg hover:shadow-xl">Confess Aggressively ✨</button>
@@ -82,7 +77,6 @@
     document.getElementById('submit-btn').addEventListener('click', async () => {
       let text = content.value.trim();
       if (!text) return alert('Confession cannot be empty! 🌸');
-      if (document.getElementById('captcha').value !== '5') return alert('Math check failed! Are you an evil bot? 🤖');
       
       let btn = document.getElementById('submit-btn');
       btn.disabled = true;

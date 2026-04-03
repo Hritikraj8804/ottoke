@@ -102,6 +102,10 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   box-shadow: 0 15px 35px -5px rgba(255, 182, 193, 0.5);
 }
 
+.confession-text {
+  white-space: pre-wrap;
+}
+
 .quote-bubble {
   position: relative;
   background: white;
