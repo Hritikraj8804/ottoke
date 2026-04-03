@@ -35,11 +35,6 @@
         <div class="absolute bottom-4 right-4 text-xs font-black bg-pink-50 text-pink-400 px-3 py-1 rounded-full border border-pink-100 shadow-sm"><span id="char-count">0</span> / 500</div>
       </div>
       
-      <div class="mt-8 flex flex-col sm:flex-row gap-4 items-center bg-white/70 p-5 rounded-2xl border-2 border-purple-100 shadow-sm">
-        <label class="font-black text-purple-500 text-sm tracking-wide">ARE YOU HUMAN? 🤖<br><span class="text-xs text-gray-400">Prove it: 2 + 3 =</span></label>
-        <input type="number" id="captcha" class="w-full sm:max-w-[120px] text-center font-black text-xl text-pink-500" placeholder="?">
-      </div>
-      
       <button id="submit-btn" class="w-full mt-8 kawaii-btn btn-japan text-lg py-4 shadow-lg hover:shadow-xl">Confess Aggressively ✨</button>
     </div>
     
@@ -82,7 +77,6 @@
     document.getElementById('submit-btn').addEventListener('click', async () => {
       let text = content.value.trim();
       if (!text) return alert('Confession cannot be empty! 🌸');
-      if (document.getElementById('captcha').value !== '5') return alert('Math check failed! Are you an evil bot? 🤖');
       
       let btn = document.getElementById('submit-btn');
       btn.disabled = true;

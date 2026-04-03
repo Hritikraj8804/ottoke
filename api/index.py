@@ -49,8 +49,9 @@ def get_db_conn():
     db_path = os.getenv("DATABASE_URL", "ottoke.db").replace("sqlite:///", "")
     if db_path.startswith("postgresql://"):
         db_path = "ottoke.db"
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=15)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
 class ConfessionSubmit(BaseModel):
@@ -138,7 +139,6 @@ def create_confession(payload: ConfessionSubmit, request: Request):
     text = payload.content.strip()
     if not text or len(text) > 500:
         raise HTTPException(status_code=400, detail="Invalid confession content")
-    text = html.escape(text)
     
     conn = get_db_conn()
     try:
@@ -197,7 +197,6 @@ def add_comment(payload: CommentSubmit, request: Request):
         raise HTTPException(status_code=400, detail="Invalid comment content")
     if payload.vibe not in ["japan", "korea"]:
         raise HTTPException(status_code=400, detail="Invalid vibe")
-    text = html.escape(text)
     
     conn = get_db_conn()
     try:
@@ -246,11 +245,23 @@ def get_leaderboard(timeframe: str = Query("all")):
 def get_daily_quote():
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("SELECT quote, source, type FROM daily_quotes WHERE used_at = CURRENT_DATE LIMIT 1")
+    cursor.execute("SELECT id, quote, source, type FROM daily_quotes WHERE used_at = CURRENT_DATE LIMIT 1")
     row = cursor.fetchone()
+    
     if not row:
-        cursor.execute("SELECT quote, source, type FROM daily_quotes LIMIT 1") # fallback
+        cursor.execute("UPDATE daily_quotes SET used_at = NULL WHERE used_at = datetime('now', '-1 day')")
+        cursor.execute("SELECT id, quote, source, type FROM daily_quotes WHERE used_at IS NULL ORDER BY RANDOM() LIMIT 1")
         row = cursor.fetchone()
+        
+        if not row:
+            cursor.execute("UPDATE daily_quotes SET used_at = NULL")
+            cursor.execute("SELECT id, quote, source, type FROM daily_quotes WHERE used_at IS NULL ORDER BY RANDOM() LIMIT 1")
+            row = cursor.fetchone()
+            
+        if row:
+            cursor.execute("UPDATE daily_quotes SET used_at = CURRENT_DATE WHERE id = ?", (row["id"],))
+            conn.commit()
+            
     conn.close()
     return dict(row) if row else {"quote": "Fighting!", "source": "Every K-drama ever", "type": "kdrama"}
 
