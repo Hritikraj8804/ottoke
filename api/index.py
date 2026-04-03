@@ -28,6 +28,13 @@ def serve_submit():
 def serve_leaderboard():
     return FileResponse("frontend/leaderboard.html")
 
+@app.get("/icons/{image_name}")
+def serve_icon(image_name: str):
+    path = f"frontend/icons/{image_name}"
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Icon not found")
+    return FileResponse(path)
+
 @app.get("/post/{id}")
 def serve_post(id: str):
     return FileResponse("frontend/post.html")
