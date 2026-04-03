@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ottoke! - Rate My Suffering</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💖</text></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="pb-24 pt-6 md:pb-10 px-4">
+  <nav class="floating-nav w-full flex justify-between items-center">
+    <a href="/" class="text-3xl font-black font-heading text-gradient-purple tracking-tighter">Ottoke<span class="text-gradient-pink">!</span></a>
+    <div class="hidden md:flex gap-6 items-center">
+      <a href="/" class="hover:text-pink-500 font-bold transition">Feed</a>
+      <a href="/leaderboard" class="hover:text-purple-500 font-bold transition">Leaderboard</a>
+      <a href="/submit" class="kawaii-btn btn-japan">Confess ✨</a>
+    </div>
+  </nav>
+  
+  <div class="fixed bottom-4 left-4 right-4 md:hidden kawaii-glass flex justify-around py-3 z-50">
+      <a href="/" class="flex flex-col items-center text-sm font-bold text-purple-500"><span class="text-2xl mb-1">🎀</span>Feed</a>
+      <a href="/leaderboard" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-purple-500 transition"><span class="text-2xl mb-1">👑</span>Ranks</a>
+      <a href="/submit" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-purple-500 transition"><span class="text-2xl mb-1">📝</span>Post</a>
+  </div>
+
+  <main class="max-w-3xl mx-auto mt-12 w-full">
+    <div class="flex justify-center mb-10 hidden" id="quote-container">
+      <div id="quote-banner" class="quote-bubble animate-float text-center">
+      </div>
+    </div>
+
+    <div class="flex justify-between items-center mb-8 px-2">
+      <h1 class="text-3xl font-black font-heading text-gradient-purple">💕 Recent Suffering 💕</h1>
+    </div>
+
+    <div id="feed">
+      <div class="text-center text-pink-400 font-bold py-10 text-xl" id="loading">Loading... ✨</div>
+    </div>
+    
+    <button id="load-more" class="w-full py-4 mb-10 btn-outline text-center hidden">Load More 🌸</button>
+  </main>
+
+  <script>
+    async function loadQuote() {
+      try {
+        let res = await fetch('/api/daily-quote');
+        let data = await res.json();
+        let quoteBanner = document.getElementById('quote-banner');
+        if (data && data.quote) {
+          quoteBanner.textContent = `"${data.quote}" — ${data.source}`;
+          document.getElementById('quote-container').classList.remove('hidden');
+        }
+      } catch (e) { console.error(e); }
+    }
+    loadQuote();
+
+    function escapeHTML(str) {
+      let div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    let konamiCode = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+    let konamiIndex = 0;
+    document.addEventListener('keydown', function(e) {
+      if (e.key.toLowerCase() === konamiCode[konamiIndex].toLowerCase()) {
+        konamiIndex++;
+        if (konamiIndex === konamiCode.length) {
+          document.body.classList.add('easter-egg-mode');
+          alert("✨ K-drama Mode Activated! ✨");
+          let elements = document.querySelectorAll('.confession-text');
+          let titles = ["Crash Landing on Your PR", "Descendants of the Deployment", "Itaewon Class of '22 Server Outage"];
+          elements.forEach(el => {
+            let orig = el.textContent;
+            el.innerHTML = `<h3>${titles[Math.floor(Math.random()*titles.length)]}</h3><p>${orig}</p>`;
+          });
+          konamiIndex = 0;
+        }
+      } else {
+        konamiIndex = 0;
+      }
+    });
+
+    let page = 1;
+    async function loadFeed() {
+      try {
+        let res = await fetch(`/api/confessions?page=${page}`);
+        let data = await res.json();
+        let feed = document.getElementById('feed');
+        if (page === 1) document.getElementById('loading').style.display = 'none';
+        
+        if (data.length === 0) {
+          if (page === 1) feed.innerHTML = "<div class='text-center text-pink-400 font-bold py-10 text-lg'>No suffering recorded yet. Be the first! 🌸</div>";
+          document.getElementById('load-more').classList.add('hidden');
+          return;
+        }
+        
+        data.forEach(item => {
+          let div = document.createElement('div');
+          div.className = 'confession-card cursor-pointer';
+          div.onclick = () => window.location.href = `/post/${item.id}`;
+          
+          div.innerHTML = `
+            <div class="text-[1.1rem] leading-relaxed text-gray-700 font-medium mb-5 confession-text">${escapeHTML(item.content)}</div>
+            <div class="flex justify-between items-center text-sm font-bold text-gray-400 border-t-2 border-pink-50 pt-4">
+              <div class="flex gap-4">
+                <span class="bg-yellow-100 text-yellow-600 px-3 py-1 rounded-full shadow-sm">⭐ ${item.avg_rating.toFixed(1)} (${item.rating_count})</span>
+                <span class="bg-blue-50 text-blue-500 px-3 py-1 rounded-full shadow-sm">💬 ${item.comment_count}</span>
+              </div>
+              <span>${new Date(item.created_at).toLocaleDateString()}</span>
+            </div>
+          `;
+          feed.appendChild(div);
+        });
+        
+        if (data.length === 20) {
+          document.getElementById('load-more').classList.remove('hidden');
+        } else {
+          document.getElementById('load-more').classList.add('hidden');
+        }
+        page++;
+      } catch(e) { 
+        document.getElementById('loading').textContent = "Failed to load feed. 😭";
+        console.error(e); 
+      }
+    }
+    loadFeed();
+    document.getElementById('load-more').addEventListener('click', loadFeed);
+  </script>
+</body>
+</html>

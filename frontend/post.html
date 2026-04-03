@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Post - Ottoke!</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💖</text></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="pb-24 pt-6 md:pb-10 px-4">
+  <nav class="floating-nav w-full flex justify-between items-center">
+    <a href="/" class="text-3xl font-black font-heading text-gradient-purple tracking-tighter">Ottoke<span class="text-gradient-pink">!</span></a>
+    <div class="hidden md:flex gap-6 items-center">
+      <a href="/" class="hover:text-pink-500 font-bold transition">Feed</a>
+      <a href="/leaderboard" class="hover:text-purple-500 font-bold transition">Leaderboard</a>
+      <a href="/submit" class="kawaii-btn btn-japan">Confess ✨</a>
+    </div>
+  </nav>
+
+  <div class="fixed bottom-4 left-4 right-4 md:hidden kawaii-glass flex justify-around py-3 z-50">
+      <a href="/" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-pink-500 transition"><span class="text-2xl mb-1">🎀</span>Feed</a>
+      <a href="/leaderboard" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-purple-500 transition"><span class="text-2xl mb-1">👑</span>Ranks</a>
+      <a href="/submit" class="flex flex-col items-center text-sm font-bold text-pink-500"><span class="text-2xl mb-1">📝</span>Post</a>
+  </div>
+
+  <main class="max-w-3xl mx-auto mt-12 w-full pb-24">
+    <div id="post-container">
+      <div class="text-center text-pink-400 py-10 font-bold text-xl" id="loading">Loading... ✨</div>
+    </div>
+    
+    <div id="interactive-section" class="hidden">
+      <!-- Ratings Block -->
+      <div class="mt-8 kawaii-glass p-8 relative">
+        <h3 class="font-black text-xl mb-6 text-center text-gradient-purple">Rate This Suffering 💖</h3>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4" id="rating-buttons">
+          <!-- Ratings injected -->
+        </div>
+        <p class="text-[10px] uppercase font-bold tracking-wider text-center text-gray-400 mt-6 bg-white/50 inline-block px-3 py-1 rounded-full absolute -top-3 left-1/2 -translate-x-1/2 border border-pink-100">Max 10 votes / hr</p>
+      </div>
+      
+      <!-- Comments Block -->
+      <div class="mt-12">
+        <h3 class="font-black text-2xl mb-6 text-gradient-pink border-b-2 border-pink-100 pb-3 flex items-center gap-2"><span>💬</span> Tea & Comments</h3>
+        <div id="comments-list" class="space-y-4 mb-10"></div>
+        
+        <div class="kawaii-glass p-6 md:p-8 relative">
+           <p class="text-[10px] uppercase font-bold tracking-wider text-center text-gray-400 mt-6 bg-white/50 inline-block px-3 py-1 rounded-full absolute -top-3 left-1/2 -translate-x-1/2 border border-pink-100">Spill</p>
+          <h4 class="font-black mb-4 text-purple-400 text-lg">Leave a Reply 🌸</h4>
+          <textarea id="comment-content" class="w-full p-4 h-28 resize-none text-gray-700" placeholder="Give your perspective... (max 300 chars) ✨"></textarea>
+          
+          <div class="flex flex-col md:flex-row justify-between items-center mt-5 gap-4">
+            <div class="flex items-center gap-3 w-full md:w-auto bg-white/60 px-4 py-2 rounded-2xl border border-pink-100">
+              <label class="text-sm font-bold text-gray-500">Vibe:</label>
+              <select id="comment-vibe" class="bg-transparent font-bold text-purple-500 outline-none flex-1 md:w-auto cursor-pointer border-none shadow-none">
+                <option value="japan">🌸 Anime</option>
+                <option value="korea">🌙 K-Drama</option>
+              </select>
+            </div>
+            <button id="reply-btn" onclick="submitComment()" class="w-full md:w-auto kawaii-btn btn-korea">Reply ✨</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function escapeHTML(str) {
+      let div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    let pathparts = window.location.pathname.split('/');
+    let id = pathparts[pathparts.length - 1] || pathparts[pathparts.length - 2];
+    
+    const RATINGS_MAP = {
+      1: { emoji: '🥱', label: 'Anime side char' },
+      2: { emoji: '😴', label: 'Filler arc' },
+      3: { emoji: '😭', label: 'Main lead' },
+      4: { emoji: '😱', label: 'Evil twist' },
+      5: { emoji: '💀', label: 'Truck-kun ending' }
+    };
+
+    async function handleVote(confId, stars) {
+      try {
+        let now = new Date();
+        let is333 = (now.getHours() === 15 && now.getMinutes() === 33);
+        
+        let res = await fetch(`/api/confessions/${confId}/vote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stars: parseInt(stars) })
+        });
+        let data = await res.json();
+        if (!res.ok) {
+           return alert(data.detail || data.error || 'Error voting 😭');
+        }
+        
+        if (is333) alert("✨ You have been blessed by the drama gods ✨");
+        else alert('Success: ' + data.message + ' 💖');
+        
+        window.location.reload();
+      } catch(e) {
+        alert("Network error 😭");
+      }
+    }
+
+    async function loadPost() {
+      try {
+        let res = await fetch(`/api/confessions/${id}`);
+        if (!res.ok) { 
+          document.getElementById('post-container').innerHTML = "<div class='text-center py-10 text-red-500 font-bold'>Confession not found. 😭</div>"; 
+          return; 
+        }
+        let data = await res.json();
+        
+        document.getElementById('post-container').innerHTML = `
+          <div class="confession-card mb-0 shadow-lg border-2 border-pink-200">
+            <div class="text-xl md:text-2xl text-gray-700 font-medium mb-6 leading-relaxed confession-text">${escapeHTML(data.content)}</div>
+            <div class="flex justify-between items-center border-t-2 border-pink-50 pt-5 text-gray-500 font-bold text-sm">
+              <span class="text-yellow-600 bg-yellow-100 px-4 py-1.5 rounded-full">⭐ ${data.avg_rating.toFixed(1)} (${data.rating_count} pt)</span>
+              <span class="bg-gray-100 px-3 py-1 rounded-xl text-gray-400">📅 ${new Date(data.created_at).toLocaleString()}</span>
+            </div>
+            <button onclick="navigator.clipboard.writeText(window.location.href); alert('Link copied to clipboard! ✨')" class="mt-5 bg-purple-50 text-purple-500 px-4 py-2 rounded-xl text-sm font-bold hover:bg-purple-100 transition flex items-center justify-center w-full gap-2"><span class="text-lg">🔗</span> Copy Shareable Link</button>
+          </div>
+        `;
+        
+        let rb = document.getElementById('rating-buttons');
+        rb.innerHTML = '';
+        for (let i=1; i<=5; i++) {
+          let btn = document.createElement('button');
+          btn.className = "flex flex-col items-center justify-center p-4 rounded-2xl bg-white border-2 border-pink-100 hover:border-pink-400 transition shadow-sm hover:shadow-md transform hover:-translate-y-1 active:translate-y-0 active:bg-pink-50";
+          btn.onclick = () => handleVote(id, i);
+          btn.innerHTML = `<span class="text-4xl mb-3 filter drop-shadow-sm">${RATINGS_MAP[i].emoji}</span><span class="text-[11px] leading-tight text-center font-bold text-purple-600 uppercase tracking-widest">${RATINGS_MAP[i].label}</span>`;
+          rb.appendChild(btn);
+        }
+        
+        let cl = document.getElementById('comments-list');
+        cl.innerHTML = '';
+        if (data.comments && data.comments.length === 0) {
+          cl.innerHTML = "<p class='text-purple-300 font-bold italic text-center py-6 bg-white/50 rounded-2xl border border-white'>No tea spilled yet. Be the first! ☕</p>";
+        } else if (data.comments) {
+          data.comments.forEach(c => {
+            let div = document.createElement('div');
+            let isJp = c.vibe === 'japan';
+            div.className = `p-5 rounded-2xl bg-white border-2 shadow-sm relative overflow-hidden ${isJp ? 'border-pink-200' : 'border-purple-200'}`;
+            div.innerHTML = `
+              <div class="absolute top-0 right-0 left-0 h-1 ${isJp ? 'bg-pink-300' : 'bg-purple-300'}"></div>
+              <div class="text-[11px] uppercase tracking-wider mb-3 flex justify-between font-black">
+                <span class="${isJp ? 'text-pink-500 bg-pink-50' : 'text-purple-600 bg-purple-50'} px-3 py-1 rounded-full">${isJp ? '🌸 Anime' : '🌙 K-Drama'}</span>
+                <span class="text-gray-400 mt-1">${new Date(c.created_at).toLocaleString()}</span>
+              </div>
+              <div class="text-gray-700 font-medium leading-relaxed mt-2 whitespace-pre-wrap">${escapeHTML(c.content)}</div>
+            `;
+            cl.appendChild(div);
+          });
+        }
+        
+        document.getElementById('interactive-section').classList.remove('hidden');
+      } catch(e) { 
+        document.getElementById('post-container').innerHTML = "<div class='text-center py-10 text-red-500 font-bold'>Error loading post. 😭</div>";
+        console.error(e); 
+      }
+    }
+    loadPost();
+    
+    async function submitComment() {
+      let txt = document.getElementById('comment-content').value.trim();
+      let vibe = document.getElementById('comment-vibe').value;
+      if (!txt) return alert("Comment is empty! 🌸");
+      
+      let btn = document.getElementById('reply-btn');
+      btn.textContent = "Sending... ✨";
+      btn.disabled = true;
+      
+      try {
+        let res = await fetch('/api/comments', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ confession_id: parseInt(id), content: txt, vibe: vibe })
+        });
+        let out = await res.json();
+        if (res.ok) {
+          window.location.reload();
+        } else {
+          alert(out.detail || out.error || "Error 😭");
+          btn.textContent = "Reply ✨";
+          btn.disabled = false;
+        }
+      } catch(e) {
+        alert("Network error 😭");
+        btn.textContent = "Reply ✨";
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

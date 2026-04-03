@@ -1,0 +1,190 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Quicksand:wght@400;500;600;700&family=Caveat:wght@700&display=swap');
+
+body {
+  font-family: 'Quicksand', sans-serif;
+  background: linear-gradient(135deg, #FFF0F5 0%, #FFE4E1 50%, #fdfbfb 100%);
+  background-attachment: fixed;
+  color: #5A4A5A;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: 'Nunito', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.kawaii-glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 4px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 32px 0 rgba(255, 182, 193, 0.2);
+  border-radius: 24px;
+}
+
+.floating-nav {
+  position: sticky;
+  top: 1rem;
+  z-index: 50;
+  margin: 0 auto;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 25px rgba(255, 182, 193, 0.3);
+}
+
+.kawaii-btn {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  border-radius: 9999px;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 6px 15px rgba(255, 182, 193, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 1.5rem;
+}
+
+.kawaii-btn:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 10px 20px rgba(255, 182, 193, 0.5);
+}
+
+.kawaii-btn:active {
+  transform: translateY(1px) scale(0.95);
+}
+
+.btn-japan {
+  background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%);
+  color: white;
+  border: 2px solid white;
+}
+
+.btn-korea {
+  background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+  color: white;
+  border: 2px solid white;
+}
+
+.btn-outline {
+  background: white;
+  color: #a18cd1;
+  border: 3px solid #fbc2eb;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  border-radius: 20px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 10px rgba(251, 194, 235, 0.2);
+}
+
+.btn-outline:hover {
+  background: #fbc2eb;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 15px rgba(251, 194, 235, 0.4);
+}
+
+.confession-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  border-radius: 28px;
+  padding: 1.75rem;
+  box-shadow: 0 10px 30px -5px rgba(255, 182, 193, 0.3);
+  margin-bottom: 2rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border: 4px solid white;
+}
+
+.confession-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 15px 35px -5px rgba(255, 182, 193, 0.5);
+}
+
+.quote-bubble {
+  position: relative;
+  background: white;
+  border-radius: 24px;
+  padding: 1rem 1.5rem;
+  display: inline-block;
+  box-shadow: 0 10px 25px rgba(161, 140, 209, 0.2);
+  border: 3px solid #fecfef;
+  font-family: 'Caveat', cursive;
+  font-size: 1.25rem;
+  color: #a18cd1;
+}
+
+.quote-bubble::after, .quote-bubble::before {
+  content: '';
+  position: absolute;
+  display: block;
+  width: 0;
+  border-style: solid;
+}
+.quote-bubble::after {
+  bottom: -15px;
+  left: 40px;
+  border-width: 15px 15px 0;
+  border-color: #fecfef transparent transparent transparent;
+}
+.quote-bubble::before {
+  bottom: -11px;
+  left: 42px;
+  border-width: 12px 12px 0;
+  border-color: white transparent transparent transparent;
+  z-index: 1;
+}
+
+@keyframes float {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(1deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.text-gradient-pink {
+  background: linear-gradient(45deg, #ff9a9e, #fe9a8b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.text-gradient-purple {
+  background: linear-gradient(45deg, #a18cd1, #fbc2eb);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Inputs and textareas */
+textarea, input[type="number"], select {
+  font-family: 'Quicksand', sans-serif;
+  background: rgba(255, 255, 255, 0.9);
+  border: 3px solid #fecfef;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+}
+
+textarea:focus, input[type="number"]:focus, select:focus {
+  outline: none;
+  border-color: #ff9a9e;
+  box-shadow: 0 0 0 4px rgba(255, 154, 158, 0.2), inset 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.easter-egg-mode .confession-card h3 {
+  color: #a18cd1;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 1.4rem;
+  margin-bottom: 0.5rem;
+  text-decoration: underline;
+  text-decoration-color: #ff9a9e;
+  text-decoration-thickness: 4px;
+}

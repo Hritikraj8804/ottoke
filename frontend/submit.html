@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confess - Ottoke!</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💖</text></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="pb-24 pt-6 md:pb-10 px-4">
+  <nav class="floating-nav w-full flex justify-between items-center">
+    <a href="/" class="text-3xl font-black font-heading text-gradient-purple tracking-tighter">Ottoke<span class="text-gradient-pink">!</span></a>
+    <div class="hidden md:flex gap-6 items-center">
+      <a href="/" class="hover:text-pink-500 font-bold transition">Feed</a>
+      <a href="/leaderboard" class="hover:text-purple-500 font-bold transition">Leaderboard</a>
+      <a href="/submit" class="kawaii-btn btn-japan">Confess ✨</a>
+    </div>
+  </nav>
+
+  <div class="fixed bottom-4 left-4 right-4 md:hidden kawaii-glass flex justify-around py-3 z-50">
+      <a href="/" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-pink-500 transition"><span class="text-2xl mb-1">🎀</span>Feed</a>
+      <a href="/leaderboard" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-purple-500 transition"><span class="text-2xl mb-1">👑</span>Ranks</a>
+      <a href="/submit" class="flex flex-col items-center text-sm font-bold text-pink-500"><span class="text-2xl mb-1">📝</span>Post</a>
+  </div>
+
+  <main class="max-w-2xl mx-auto mt-12 w-full">
+    <div class="kawaii-glass p-8 md:p-10 relative">
+      <div class="absolute -top-6 left-1/2 -translate-x-1/2 text-4xl floating">📝</div>
+      <h1 class="text-3xl md:text-4xl mt-2 font-black font-heading text-gradient-pink mb-2 text-center text-shadow-sm">Spill The Tea!</h1>
+      <p class="text-gray-500 text-center font-bold mb-8 text-sm bg-white/50 py-2 rounded-xl inline-block w-full">Anonymous & Unfiltered. 🔒<br><span class="text-[10px] uppercase tracking-wide text-purple-400">Max 5 limits/hr</span></p>
+      
+      <div class="relative">
+        <textarea id="content" class="w-full text-gray-700 p-6 h-48 focus:border-transparent transition resize-none font-medium text-lg leading-relaxed shadow-sm" placeholder="Tell us... I deleted the production database... 😭"></textarea>
+        <div class="absolute bottom-4 right-4 text-xs font-black bg-pink-50 text-pink-400 px-3 py-1 rounded-full border border-pink-100 shadow-sm"><span id="char-count">0</span> / 500</div>
+      </div>
+      
+      <div class="mt-8 flex flex-col sm:flex-row gap-4 items-center bg-white/70 p-5 rounded-2xl border-2 border-purple-100 shadow-sm">
+        <label class="font-black text-purple-500 text-sm tracking-wide">ARE YOU HUMAN? 🤖<br><span class="text-xs text-gray-400">Prove it: 2 + 3 =</span></label>
+        <input type="number" id="captcha" class="w-full sm:max-w-[120px] text-center font-black text-xl text-pink-500" placeholder="?">
+      </div>
+      
+      <button id="submit-btn" class="w-full mt-8 kawaii-btn btn-japan text-lg py-4 shadow-lg hover:shadow-xl">Confess Aggressively ✨</button>
+    </div>
+    
+    <div class="mt-12 mb-20 relative">
+      <h3 class="text-xs font-black text-purple-300 uppercase tracking-widest mb-4 ml-6 text-center">Live Preview 👀</h3>
+      <div class="confession-card bg-white/40 border-dashed border-4 border-pink-100 mb-0 pointer-events-none transform scale-95">
+        <div id="preview" class="text-gray-400 text-lg font-medium text-center italic">✨ Your juicy text will appear right here ✨</div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let content = document.getElementById('content');
+    let preview = document.getElementById('preview');
+    let charCount = document.getElementById('char-count');
+    
+    function escapeHTML(str) {
+      let div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    content.addEventListener('input', () => {
+      let val = content.value.substring(0, 500);
+      if (content.value.length > 500) content.value = val;
+      charCount.textContent = val.length;
+      charCount.style.color = val.length > 480 ? '#FF7B9E' : '';
+      
+      if (val) {
+        preview.innerHTML = escapeHTML(val);
+        preview.classList.remove('text-center', 'italic', 'text-gray-400');
+        preview.classList.add('text-gray-700');
+      } else {
+        preview.innerHTML = "✨ Your juicy text will appear right here ✨";
+        preview.classList.add('text-center', 'italic', 'text-gray-400');
+        preview.classList.remove('text-gray-700');
+      }
+    });
+
+    document.getElementById('submit-btn').addEventListener('click', async () => {
+      let text = content.value.trim();
+      if (!text) return alert('Confession cannot be empty! 🌸');
+      if (document.getElementById('captcha').value !== '5') return alert('Math check failed! Are you an evil bot? 🤖');
+      
+      let btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      btn.innerHTML = 'Sending via Truck-kun... 🚚';
+      btn.classList.add('opacity-70');
+      
+      try {
+        let res = await fetch('/api/confessions', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ content: text })
+        });
+        let data = await res.json();
+        if (res.ok) {
+          alert('Success: ' + data.message + ' 💖');
+          window.location.href = '/';
+        } else {
+          alert(data.detail || data.error || "Error 😭");
+          btn.disabled = false;
+          btn.innerHTML = 'Confess Aggressively ✨';
+          btn.classList.remove('opacity-70');
+        }
+      } catch(e) {
+        alert("Network error. Try again! 🌸");
+        btn.disabled = false;
+        btn.innerHTML = 'Confess Aggressively ✨';
+        btn.classList.remove('opacity-70');
+      }
+    });
+  </script>
+</body>
+</html>

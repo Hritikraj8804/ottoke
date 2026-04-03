@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaderboard - Ottoke!</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💖</text></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="pb-24 pt-6 md:pb-10 px-4">
+  <nav class="floating-nav w-full flex justify-between items-center">
+    <a href="/" class="text-3xl font-black font-heading text-gradient-purple tracking-tighter">Ottoke<span class="text-gradient-pink">!</span></a>
+    <div class="hidden md:flex gap-6 items-center">
+      <a href="/" class="hover:text-pink-500 font-bold transition">Feed</a>
+      <a href="/leaderboard" class="hover:text-purple-500 font-bold transition">Leaderboard</a>
+      <a href="/submit" class="kawaii-btn btn-japan">Confess ✨</a>
+    </div>
+  </nav>
+  
+  <div class="fixed bottom-4 left-4 right-4 md:hidden kawaii-glass flex justify-around py-3 z-50">
+      <a href="/" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-pink-500 transition"><span class="text-2xl mb-1">🎀</span>Feed</a>
+      <a href="/leaderboard" class="flex flex-col items-center text-sm font-bold text-purple-500"><span class="text-2xl mb-1">👑</span>Ranks</a>
+      <a href="/submit" class="flex flex-col items-center text-sm font-bold text-gray-400 hover:text-pink-500 transition"><span class="text-2xl mb-1">📝</span>Post</a>
+  </div>
+
+  <main class="max-w-3xl mx-auto mt-12 w-full">
+    <h1 class="text-4xl font-black font-heading text-center text-gradient-purple mb-8">💖 Hall of Despair 💖</h1>
+    
+    <div class="flex justify-center gap-4 mb-10">
+      <button onclick="loadLeaderboard('all')" class="kawaii-btn btn-korea">All Time 🌟</button>
+      <button onclick="loadLeaderboard('week')" class="kawaii-btn btn-japan">This Week 🌸</button>
+    </div>
+    
+    <div id="leaderboard">
+      <div class="text-center text-pink-400 font-bold text-xl py-10" id="loading">Loading ranks... ✨</div>
+    </div>
+  </main>
+
+  <script>
+    function escapeHTML(str) {
+      let div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    async function loadLeaderboard(timeframe) {
+      try {
+        let lb = document.getElementById('leaderboard');
+        lb.innerHTML = '<div class="text-center text-pink-400 font-bold text-xl py-10">Loading ranks... ✨</div>';
+        
+        let res = await fetch('/api/leaderboard?timeframe=' + timeframe);
+        let data = await res.json();
+        lb.innerHTML = '';
+        
+        if (data.length === 0) {
+          lb.innerHTML = '<div class="text-center text-pink-400 font-bold py-10">No ranked items yet. 😭</div>';
+          return;
+        }
+        
+        let awards = ["👑 Chaebol Heir Energy", "🌸 Sakura Tears Award", "✨ Filler Arc Champion"];
+        
+        data.forEach((item, index) => {
+          let div = document.createElement('div');
+          div.className = 'confession-card flex gap-4 cursor-pointer items-center relative overflow-hidden';
+          if (index < 3) div.classList.add('border-pink-300');
+          div.onclick = () => window.location.href = `/post/${item.id}`;
+          
+          let rankBadge = index < 3 
+            ? `<div class="font-black text-lg md:text-xl text-gradient-pink mb-3 tracking-wide">${awards[index]}</div>` 
+            : ``;
+          
+          let rankNumber = index < 3 
+            ? `<div class="text-center text-4xl md:text-5xl font-black text-gradient-purple drop-shadow-sm w-16">#${index+1}</div>`
+            : `<div class="text-center text-3xl font-black text-purple-200 w-16">#${index+1}</div>`;
+            
+          div.innerHTML = `
+            ${rankNumber}
+            <div class="flex-1 border-l-2 border-pink-50 pl-6">
+              ${rankBadge}
+              <div class="text-md md:text-lg text-gray-700 font-medium leading-relaxed confession-text">${escapeHTML(item.content)}</div>
+              <div class="mt-4 text-xs md:text-sm font-bold flex flex-wrap gap-3">
+                <span class="text-yellow-600 bg-yellow-100/80 px-3 py-1 rounded-full">⭐ ${item.avg_rating.toFixed(1)} (${item.rating_count} pt)</span>
+                <span class="text-blue-500 bg-blue-100/80 px-3 py-1 rounded-full">💬 ${item.comment_count}</span>
+              </div>
+            </div>
+          `;
+          lb.appendChild(div);
+        });
+      } catch(e) { 
+        document.getElementById('leaderboard').innerHTML = '<div class="text-center text-red-400 font-bold py-10">Failed to load leaderboard. 😭</div>';
+        console.error(e); 
+      }
+    }
+    loadLeaderboard('all');
+  </script>
+</body>
+</html>
