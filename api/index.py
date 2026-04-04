@@ -5,6 +5,8 @@ import hashlib
 from typing import Optional, List
 from datetime import datetime, timedelta
 import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, Request, HTTPException, status, Header, Query
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,13 +55,22 @@ app.add_middleware(
 )
 
 def get_db_conn():
-    db_path = os.getenv("DATABASE_URL", "ottoke.db").replace("sqlite:///", "")
-    if db_path.startswith("postgresql://"):
-        db_path = "ottoke.db"
-    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
-    return conn
+    """Returns database connection (SQLite for local, PostgreSQL for production)"""
+    
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    
+    # If DATABASE_URL exists and starts with postgresql:// → Use PostgreSQL
+    if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
+        # PostgreSQL connection for RDS
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        return conn
+    else:
+        # SQLite connection for local development
+        db_path = os.getenv("DATABASE_URL", "ottoke.db").replace("sqlite:///", "")
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=15)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        return conn
 
 class ConfessionSubmit(BaseModel):
     content: str
@@ -87,8 +98,8 @@ def check_rate_limit(conn, ip_hash: str, action: str, limit: int, hours: int = 1
     cursor.execute(
         """
         SELECT COUNT(*) FROM rate_limits 
-        WHERE ip_hash = ? AND action = ? 
-        AND created_at >= datetime('now', '-' || ? || ' hours')
+        WHERE ip_hash = %s AND action = %s 
+        AND created_at >= datetime('now', '-' || %s || ' hours')
         """, 
         (ip_hash, action, hours)
     )
@@ -97,7 +108,7 @@ def check_rate_limit(conn, ip_hash: str, action: str, limit: int, hours: int = 1
         raise HTTPException(status_code=429, detail="Too many requests")
     
     cursor.execute(
-        "INSERT INTO rate_limits (ip_hash, action) VALUES (?, ?)",
+        "INSERT INTO rate_limits (ip_hash, action) VALUES (%s, %s)",
         (ip_hash, action)
     )
     conn.commit()
@@ -112,7 +123,7 @@ def list_confessions(page: int = 1):
         FROM confessions 
         WHERE is_deleted = FALSE 
         ORDER BY created_at DESC 
-        LIMIT 20 OFFSET ?
+        LIMIT 20 OFFSET %s
     """, (offset,))
     confessions = [dict(row) for row in cursor.fetchall()]
     conn.close()
@@ -122,7 +133,7 @@ def list_confessions(page: int = 1):
 def get_confession(conf_id: int):
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM confessions WHERE id = ? AND is_deleted = FALSE", (conf_id,))
+    cursor.execute("SELECT * FROM confessions WHERE id = %s AND is_deleted = FALSE", (conf_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -132,7 +143,7 @@ def get_confession(conf_id: int):
     cursor.execute("""
         SELECT id, parent_id, content, vibe, created_at
         FROM comments
-        WHERE confession_id = ?
+        WHERE confession_id = %s
         ORDER BY created_at ASC
     """, (conf_id,))
     comments = [dict(r) for r in cursor.fetchall()]
@@ -153,7 +164,7 @@ def create_confession(payload: ConfessionSubmit, request: Request):
         
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO confessions (content) VALUES (?) RETURNING id",
+            "INSERT INTO confessions (content) VALUES (%s) RETURNING id",
             (text,)
         )
         new_id = cursor.fetchone()["id"]
@@ -173,25 +184,27 @@ def vote_confession(conf_id: int, payload: VoteSubmit, request: Request):
         session_id = get_session_id(request)
         
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM confessions WHERE id = ? AND is_deleted = FALSE", (conf_id,))
+        cursor.execute("SELECT id FROM confessions WHERE id = %s AND is_deleted = FALSE", (conf_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Confession not found")
         
         try:
             cursor.execute(
-                "INSERT INTO votes (confession_id, stars, session_id) VALUES (?, ?, ?)",
+                "INSERT INTO votes (confession_id, stars, session_id) VALUES (%s, %s, %s)",
                 (conf_id, payload.stars, session_id)
             )
-        except sqlite3.IntegrityError:
+        except Exception as e:
+            # Handle duplicate vote (PostgreSQL uses unique constraint)
             raise HTTPException(status_code=400, detail="Already voted")
         
         cursor.execute("""
             UPDATE confessions 
-            SET rating_sum = rating_sum + ?, rating_count = rating_count + 1 
-            WHERE id = ? 
-            RETURNING avg_rating
+            SET rating_sum = rating_sum + %s, rating_count = rating_count + 1 
+            WHERE id = %s 
+            RETURNING (rating_sum * 1.0 / rating_count) as avg_rating
         """, (payload.stars, conf_id))
-        new_avg = cursor.fetchone()["avg_rating"]
+        result = cursor.fetchone()
+        new_avg = result["avg_rating"] if result else 0
         conn.commit()
         return {"new_avg_rating": round(new_avg, 1), "message": "Vote recorded."}
     finally:
@@ -207,24 +220,24 @@ def add_comment(payload: CommentSubmit, request: Request):
     
     conn = get_db_conn()
     try:
-        check_rate_limit(conn, get_ip_hash(request), "comment", 10) # 10 comments per hour
+        check_rate_limit(conn, get_ip_hash(request), "comment", 10)
         session_id = get_session_id(request)
         
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM confessions WHERE id = ? AND is_deleted=FALSE", (payload.confession_id,))
+        cursor.execute("SELECT id FROM confessions WHERE id = %s AND is_deleted=FALSE", (payload.confession_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Confession not found")
             
         cursor.execute(
             """
             INSERT INTO comments (confession_id, parent_id, content, vibe, session_id)
-            VALUES (?, ?, ?, ?, ?) RETURNING id
+            VALUES (%s, %s, %s, %s, %s) RETURNING id
             """,
             (payload.confession_id, payload.parent_id, text, payload.vibe, session_id)
         )
         new_id = cursor.fetchone()["id"]
         
-        cursor.execute("UPDATE confessions SET comment_count = comment_count + 1 WHERE id = ?", (payload.confession_id,))
+        cursor.execute("UPDATE confessions SET comment_count = comment_count + 1 WHERE id = %s", (payload.confession_id,))
         conn.commit()
         return {"id": new_id, "vibe": payload.vibe, "message": "Comment added"}
     finally:
@@ -235,7 +248,8 @@ def get_leaderboard(timeframe: str = Query("all")):
     conn = get_db_conn()
     cursor = conn.cursor()
     query = """
-        SELECT id, content, avg_rating, comment_count, rating_count
+        SELECT id, content, (rating_sum * 1.0 / rating_count) as avg_rating, 
+               comment_count, rating_count
         FROM confessions
         WHERE is_deleted = FALSE AND rating_count > 0
     """
@@ -252,21 +266,26 @@ def get_leaderboard(timeframe: str = Query("all")):
 def get_daily_quote():
     conn = get_db_conn()
     cursor = conn.cursor()
+    
+    # For PostgreSQL, use CURRENT_DATE; for SQLite it works too
     cursor.execute("SELECT id, quote, source, type FROM daily_quotes WHERE used_at = CURRENT_DATE LIMIT 1")
     row = cursor.fetchone()
     
     if not row:
+        # Reset old quotes
         cursor.execute("UPDATE daily_quotes SET used_at = NULL WHERE used_at = datetime('now', '-1 day')")
+        # Get random unused quote
         cursor.execute("SELECT id, quote, source, type FROM daily_quotes WHERE used_at IS NULL ORDER BY RANDOM() LIMIT 1")
         row = cursor.fetchone()
         
         if not row:
+            # Reset all if none found
             cursor.execute("UPDATE daily_quotes SET used_at = NULL")
             cursor.execute("SELECT id, quote, source, type FROM daily_quotes WHERE used_at IS NULL ORDER BY RANDOM() LIMIT 1")
             row = cursor.fetchone()
             
         if row:
-            cursor.execute("UPDATE daily_quotes SET used_at = CURRENT_DATE WHERE id = ?", (row["id"],))
+            cursor.execute("UPDATE daily_quotes SET used_at = CURRENT_DATE WHERE id = %s", (row["id"],))
             conn.commit()
             
     conn.close()
@@ -298,7 +317,7 @@ def rotate_daily_quote():
         
     if row:
         cursor.execute("UPDATE daily_quotes SET used_at = NULL WHERE used_at = CURRENT_DATE")
-        cursor.execute("UPDATE daily_quotes SET used_at = CURRENT_DATE WHERE id = ?", (row["id"],))
+        cursor.execute("UPDATE daily_quotes SET used_at = CURRENT_DATE WHERE id = %s", (row["id"],))
     conn.commit()
     conn.close()
     return {"status": "ok"}
