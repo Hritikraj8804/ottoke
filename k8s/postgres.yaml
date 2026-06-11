@@ -4,18 +4,21 @@ metadata:
   name: postgres
   namespace: ottoke
 spec:
+  clusterIP: None
   selector:
     app: postgres
   ports:
     - port: 5432
+      name: postgres
 
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata: 
   name: postgres
   namespace: ottoke
 spec:
+  serviceName: postgres
   replicas: 1
   selector:
     matchLabels:
@@ -46,3 +49,15 @@ spec:
                 key: POSTGRES_DB
           ports:
           - containerPort: 5432
+            name: postgres
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
