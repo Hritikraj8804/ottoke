@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ottoke-service
+  name: ottoke-backend
   namespace: ottoke
 spec:
   selector:
-    app: ottoke
+    app: ottoke-backend
   ports:
-    - port: 80
+    - port: 8000
       targetPort: 8000
   type: ClusterIP

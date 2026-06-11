@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ottoke
+description: A Helm chart for Ottoke, the 3-tier confession and rating web application.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

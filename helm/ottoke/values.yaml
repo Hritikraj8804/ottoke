@@ -1,0 +1,113 @@
+# Default values for ottoke chart.
+
+namespace: ottoke
+
+global:
+  # Base name overrides if desired
+  nameOverride: ""
+  fullnameOverride: ""
+
+# Backend API Configuration
+backend:
+  replicaCount: 2
+  image:
+    repository: hritikraj8804/ottoke-backend
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8000
+  allowedOrigins: "*"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+# Frontend Nginx Configuration
+frontend:
+  replicaCount: 2
+  image:
+    repository: hritikraj8804/ottoke-frontend
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    limits:
+      cpu: 250m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+
+# PostgreSQL Configuration
+postgres:
+  image:
+    repository: postgres
+    tag: 15-alpine
+    pullPolicy: IfNotPresent
+  service:
+    port: 5432
+  credentials:
+    user: ottoke
+    password: ottoke_secure_password
+    database: ottoke
+  persistence:
+    size: 2Gi
+    storageClassName: "" # Defaults to cluster default storage class
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+# Redis Configuration
+redis:
+  image:
+    repository: redis
+    tag: 7-alpine
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # Ensure client IP is forwarded correctly for rate limiting
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+  hosts:
+    - host: ottoke.local
+      paths:
+        - path: /api
+          pathType: Prefix
+          backendService: backend
+          backendPort: 8000
+        - path: /
+          pathType: Prefix
+          backendService: frontend
+          backendPort: 8080
+
+# Database Seeding Job Configuration
+databaseSeedJob:
+  enabled: true
+  image:
+    repository: hritikraj8804/ottoke-backend
+    tag: latest
+    pullPolicy: Always
