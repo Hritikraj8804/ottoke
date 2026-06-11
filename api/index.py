@@ -3,6 +3,7 @@ import hashlib
 from typing import Optional
 import sqlite3
 import psycopg2
+import redis
 from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -10,42 +11,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
+from contextlib import asynccontextmanager
+import scripts.seed_db
+
 # Load env: .env.production takes priority, else .env.local
 if os.path.exists(".env.production"):
     load_dotenv(".env.production")
 else:
     load_dotenv(".env.local")
 
-app = FastAPI(title="Ottoke API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # App startup: Initialize the DB and wait for PG connection
+    scripts.seed_db.init_db()
+    yield
 
-# ─── Static File Serving ────────────────────────────────────────────────────
+app = FastAPI(title="Ottoke API", lifespan=lifespan)
 
-@app.get("/")
-def serve_index():
-    return FileResponse("frontend/index.html")
-
-@app.get("/submit")
-def serve_submit():
-    return FileResponse("frontend/submit.html")
-
-@app.get("/leaderboard")
-def serve_leaderboard():
-    return FileResponse("frontend/leaderboard.html")
-
-@app.get("/icons/{image_name}")
-def serve_icon(image_name: str):
-    path = f"frontend/icons/{image_name}"
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Icon not found")
-    return FileResponse(path)
-
-@app.get("/post/{id}")
-def serve_post(id: str):
-    return FileResponse("frontend/post.html")
-
-@app.get("/style.css")
-def serve_style():
-    return FileResponse("frontend/style.css")
+# Initialize Redis Client if REDIS_URL is available
+REDIS_URL = os.getenv("REDIS_URL")
+redis_client = None
+if REDIS_URL:
+    try:
+        redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+        # Test connection
+        redis_client.ping()
+        print("🚀 Connected to Redis successfully!")
+    except Exception as e:
+        print(f"⚠️ Failed to connect to Redis: {e}. Falling back to DB-based rate limiter.")
+        redis_client = None
 
 # ─── CORS ───────────────────────────────────────────────────────────────────
 
@@ -131,26 +125,38 @@ def get_session_id(request: Request) -> str:
     return hashlib.sha256(f"{ip}-{user_agent}-ottoke-salt".encode()).hexdigest()
 
 def check_rate_limit(conn, ip_hash: str, action: str, limit: int, hours: int = 1):
-    p = ph()
-    cursor = conn.cursor()
-    cursor.execute(
-        f"""
-        SELECT COUNT(*) FROM rate_limits 
-        WHERE ip_hash = {p} AND action = {p} 
-        AND created_at >= datetime('now', '-' || {p} || ' hours')
-        """,
-        (ip_hash, action, hours)
-    )
-    row = cursor.fetchone()
-    count = row[0] if isinstance(row, (tuple, list)) else row["count(*)"] if "count(*)" in dict(row) else list(dict(row).values())[0]
-    if count >= limit:
-        raise HTTPException(status_code=429, detail="Too many requests")
+    if redis_client:
+        key = f"rate:{ip_hash}:{action}"
+        current = redis_client.get(key)
+        if current and int(current) >= limit:
+            raise HTTPException(status_code=429, detail="Too many requests")
+        
+        val = redis_client.incr(key)
+        if val == 1:
+            redis_client.expire(key, hours * 3600)
+    else:
+        p = ph()
+        cursor = conn.cursor()
+        interval_sql = f"NOW() - INTERVAL '{hours} hours'" if _use_postgres() else f"datetime('now', '-{hours} hours')"
+        
+        cursor.execute(
+            f"""
+            SELECT COUNT(*) FROM rate_limits 
+            WHERE ip_hash = {p} AND action = {p} 
+            AND created_at >= {interval_sql}
+            """,
+            (ip_hash, action)
+        )
+        row = cursor.fetchone()
+        count = row[0] if isinstance(row, (tuple, list)) else row["count(*)"] if "count(*)" in dict(row) else list(dict(row).values())[0]
+        if count >= limit:
+            raise HTTPException(status_code=429, detail="Too many requests")
 
-    cursor.execute(
-        f"INSERT INTO rate_limits (ip_hash, action) VALUES ({p}, {p})",
-        (ip_hash, action)
-    )
-    conn.commit()
+        cursor.execute(
+            f"INSERT INTO rate_limits (ip_hash, action) VALUES ({p}, {p})",
+            (ip_hash, action)
+        )
+        conn.commit()
 
 # ─── API Endpoints ───────────────────────────────────────────────────────────
 
@@ -163,7 +169,7 @@ def list_confessions(page: int = 1):
     cursor.execute(f"""
         SELECT id, content, avg_rating, rating_count, comment_count, created_at 
         FROM confessions 
-        WHERE is_deleted = 0
+        WHERE is_deleted = FALSE
         ORDER BY created_at DESC 
         LIMIT 20 OFFSET {p}
     """, (offset,))
@@ -176,7 +182,7 @@ def get_confession(conf_id: int):
     p = ph()
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM confessions WHERE id = {p} AND is_deleted = 0", (conf_id,))
+    cursor.execute(f"SELECT * FROM confessions WHERE id = {p} AND is_deleted = FALSE", (conf_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -227,7 +233,7 @@ def vote_confession(conf_id: int, payload: VoteSubmit, request: Request):
         session_id = get_session_id(request)
 
         cursor = conn.cursor()
-        cursor.execute(f"SELECT id FROM confessions WHERE id = {p} AND is_deleted = 0", (conf_id,))
+        cursor.execute(f"SELECT id FROM confessions WHERE id = {p} AND is_deleted = FALSE", (conf_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Confession not found")
 
@@ -269,7 +275,7 @@ def add_comment(payload: CommentSubmit, request: Request):
         session_id = get_session_id(request)
 
         cursor = conn.cursor()
-        cursor.execute(f"SELECT id FROM confessions WHERE id = {p} AND is_deleted = 0", (payload.confession_id,))
+        cursor.execute(f"SELECT id FROM confessions WHERE id = {p} AND is_deleted = FALSE", (payload.confession_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Confession not found")
 
@@ -296,10 +302,11 @@ def get_leaderboard(timeframe: str = Query("all")):
         SELECT id, content, (rating_sum * 1.0 / rating_count) as avg_rating, 
                comment_count, rating_count
         FROM confessions
-        WHERE is_deleted = 0 AND rating_count > 0
+        WHERE is_deleted = FALSE AND rating_count > 0
     """
     if timeframe == "week":
-        query += " AND created_at >= datetime('now', '-7 days') "
+        interval_sql = "NOW() - INTERVAL '7 days'" if _use_postgres() else "datetime('now', '-7 days')"
+        query += f" AND created_at >= {interval_sql} "
 
     query += " ORDER BY avg_rating DESC, rating_count DESC LIMIT 10"
     cursor.execute(query)
@@ -317,7 +324,8 @@ def get_daily_quote():
     row = cursor.fetchone()
 
     if not row:
-        cursor.execute("UPDATE daily_quotes SET used_at = NULL WHERE used_at = date('now', '-1 day')")
+        interval_sql = "CURRENT_DATE - INTERVAL '1 day'" if _use_postgres() else "date('now', '-1 day')"
+        cursor.execute(f"UPDATE daily_quotes SET used_at = NULL WHERE used_at = {interval_sql}")
         cursor.execute("SELECT id, quote, source, type FROM daily_quotes WHERE used_at IS NULL ORDER BY RANDOM() LIMIT 1")
         row = cursor.fetchone()
 

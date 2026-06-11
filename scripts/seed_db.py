@@ -4,16 +4,31 @@ from dotenv import load_dotenv
 
 load_dotenv(".env.local")
 
+import time
+
 def init_db():
     DATABASE_URL = os.getenv("DATABASE_URL")
     
     # Check if we're using PostgreSQL (RDS) or SQLite (local)
     if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
-        print("📦 Using PostgreSQL (RDS)...")
+        print("📦 Connecting to PostgreSQL...")
         import psycopg2
         from psycopg2.extras import RealDictCursor
+        from psycopg2 import OperationalError
         
-        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        max_retries = 5
+        conn = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+                break
+            except OperationalError as e:
+                if attempt == max_retries:
+                    print("❌ PostgreSQL failed to become ready.")
+                    raise e
+                print(f"⏳ Waiting for PostgreSQL (attempt {attempt}/{max_retries})...")
+                time.sleep(2 ** attempt)
+        
         cursor = conn.cursor()
         
         # PostgreSQL schema
@@ -27,10 +42,13 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS confessions (
             id SERIAL PRIMARY KEY,
-            content TEXT NOT NULL,
+            content TEXT NOT NULL CHECK (length(content) <= 500),
             rating_sum INTEGER DEFAULT 0,
             rating_count INTEGER DEFAULT 0,
             comment_count INTEGER DEFAULT 0,
+            avg_rating FLOAT GENERATED ALWAYS AS (
+                CASE WHEN rating_count > 0 THEN CAST(rating_sum AS FLOAT) / rating_count ELSE 0 END
+            ) STORED,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             is_deleted BOOLEAN DEFAULT FALSE
         );
@@ -38,7 +56,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS votes (
             id SERIAL PRIMARY KEY,
             confession_id INTEGER REFERENCES confessions(id) ON DELETE CASCADE,
-            stars INTEGER NOT NULL,
+            stars INTEGER CHECK (stars >= 1 AND stars <= 5),
             session_id TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(confession_id, session_id)
@@ -48,7 +66,7 @@ def init_db():
             id SERIAL PRIMARY KEY,
             confession_id INTEGER REFERENCES confessions(id) ON DELETE CASCADE,
             parent_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
-            content TEXT NOT NULL,
+            content TEXT NOT NULL CHECK (length(content) <= 300),
             vibe TEXT CHECK (vibe IN ('japan', 'korea')),
             session_id TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -56,13 +74,15 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS daily_quotes (
             id SERIAL PRIMARY KEY,
-            quote TEXT NOT NULL,
+            quote TEXT NOT NULL UNIQUE,
             source TEXT NOT NULL,
             type TEXT CHECK (type IN ('anime', 'kdrama')),
             used_at DATE DEFAULT NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_confessions_created ON confessions(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_confessions_avg_rating ON confessions(avg_rating DESC);
+        CREATE INDEX IF NOT EXISTS idx_votes_confession ON votes(confession_id);
         CREATE INDEX IF NOT EXISTS idx_comments_confession ON comments(confession_id);
         CREATE INDEX IF NOT EXISTS idx_rate_limits_ip_action ON rate_limits(ip_hash, action, created_at);
         """
@@ -95,18 +115,12 @@ def init_db():
             ("Every moment I spent with you was a miracle.", "Crash Landing on You", "kdrama"),
         ]
         
-        cursor.execute("SELECT COUNT(*) FROM daily_quotes")
-        count = cursor.fetchone()["count"]
-        
-        if count == 0:
-            for quote, source, qtype in quotes:
-                cursor.execute(
-                    "INSERT INTO daily_quotes (quote, source, type) VALUES (%s, %s, %s)",
-                    (quote, source, qtype)
-                )
-            print(f"✅ Seeded {len(quotes)} quotes to PostgreSQL")
-        else:
-            print(f"✅ Database already has {count} quotes")
+        for quote, source, qtype in quotes:
+            cursor.execute(
+                "INSERT INTO daily_quotes (quote, source, type) VALUES (%s, %s, %s) ON CONFLICT (quote) DO NOTHING",
+                (quote, source, qtype)
+            )
+        print(f"✅ Executed quotes seed to PostgreSQL safely")
         
         conn.commit()
         cursor.close()
@@ -167,7 +181,7 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS daily_quotes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            quote TEXT NOT NULL,
+            quote TEXT NOT NULL UNIQUE,
             source TEXT NOT NULL,
             type TEXT CHECK (type IN ('anime', 'kdrama')),
             used_at DATE DEFAULT NULL
@@ -208,15 +222,11 @@ def init_db():
             ("Every moment I spent with you was a miracle.", "Crash Landing on You", "kdrama"),
         ]
         
-        cursor.execute("SELECT COUNT(*) FROM daily_quotes")
-        if cursor.fetchone()[0] == 0:
-            cursor.executemany(
-                "INSERT INTO daily_quotes (quote, source, type) VALUES (?, ?, ?)",
-                quotes
-            )
-            print(f"✅ Seeded {len(quotes)} quotes to SQLite")
-        else:
-            print("✅ Database already has quotes")
+        cursor.executemany(
+            "INSERT OR IGNORE INTO daily_quotes (quote, source, type) VALUES (?, ?, ?)",
+            quotes
+        )
+        print(f"✅ Executed quotes seed to SQLite safely")
         
         conn.commit()
         cursor.close()

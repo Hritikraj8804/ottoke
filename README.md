@@ -15,25 +15,59 @@ We are currently running on a local **SQLite** database which stores everything 
 - **CORS Protection:** Enforces dynamic `ALLOWED_ORIGINS` setup via backend configuration.
 
 ## Local Development
-1. Clone the repository.
-2. Ensure you have Python 3.11+ installed.
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Create a `.env.local` file explicitly indicating the allowed URL origin:
-   ```env
-   ALLOWED_ORIGINS=http://localhost:8000
-   ```
-5. Initialize the database and seed the daily quotes:
-   ```bash
-   python scripts/seed_db.py
-   ```
-6. Run the application locally using Uvicorn:
-   ```bash
-   uvicorn api.index:app --reload
-   ```
-   *Note: Open `http://localhost:8000` in your browser to view the frontend.*
+
+### 1. Prerequisites
+Ensure you have **Python 3.11+** installed on your system.
+
+### 2. Setup Virtual Environment & Install Dependencies
+A virtual environment `venv` is already included. You can use it or create a new one:
+
+#### On Windows (PowerShell):
+```powershell
+# Activate the virtual environment
+.\venv\Scripts\Activate.ps1
+
+# Install required dependencies
+pip install -r requirements.txt
+```
+
+#### On Windows (Command Prompt / CMD):
+```cmd
+# Activate the virtual environment
+venv\Scripts\activate.bat
+
+# Install required dependencies
+pip install -r requirements.txt
+```
+
+#### On macOS / Linux:
+```bash
+# Activate the virtual environment
+source venv/bin/activate
+
+# Install required dependencies
+pip install -r requirements.txt
+```
+
+### 3. Environment Variables
+Create a file named `.env.local` in the root of the project with the following content (or modify the existing one):
+```env
+ALLOWED_ORIGINS=http://localhost:8000
+```
+
+### 4. Seed Database
+Initialize and seed the SQLite database with daily quotes and tables:
+```bash
+python scripts/seed_db.py
+```
+
+### 5. Run the Application
+Start the Uvicorn development server:
+```bash
+uvicorn api.index:app --reload
+```
+Once the server is running, open your web browser and navigate to:
+👉 **[http://localhost:8000](http://localhost:8000)**
 
 ## Deployment
 This app can be deployed anywhere Python is supported (e.g., Render, Railway, fly.io, Heroku, or a generic VPS). Just ensure Uvicorn is executed to start `api.index:app`. Because it uses a local SQLite state, avoid strictly ephemeral filesystems for long term use.
