@@ -1,112 +1,181 @@
-# Ottoke - Rate My Suffering
+# Ottoke — Rate My Suffering 😭
 
-A full-stack web application where users anonymously submit workplace confessions and rate others' suffering.
+[![Kubernetes](https://img.shields.io/badge/kubernetes-v1.35%2B-blue?logo=kubernetes&style=flat-square)](https://kubernetes.io/)
+[![Helm](https://img.shields.io/badge/helm-v3-blue?logo=helm&style=flat-square)](https://helm.sh/)
+[![ArgoCD](https://img.shields.io/badge/gitops-argocd-orange?logo=argo&style=flat-square)](https://argoproj.github.io/cd/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-v0.100%2B-009688?logo=fastapi&style=flat-square)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-## Architecture & Tech Stack
+**Ottoke** ("*What to do?!*" in Korean) is a production-grade, 3-tier open-source web application where users can anonymously submit workplace confessions and rate others' suffering. 
 
-The application supports two architectures:
-1. **Monolithic Mode (2-Tier)**: FastAPI hosts the API and serves static assets directly, reading/writing from a local SQLite database (`ottoke.db`).
-2. **Microservices Mode (3-Tier)**: Decoupled services orchestrated via Docker Compose or Kubernetes, using Nginx for static file delivery and reverse proxying, PostgreSQL for relational storage, and Redis for session caching/rate limiting.
+Designed as a cloud-native training sandbox, the project demonstrates modern software engineering and DevOps patterns—ranging from simple local SQLite scripting to Docker Compose orchestration, Helm Chart packaging, and fully automated GitOps delivery using ArgoCD.
+
+---
+
+## 🏗️ Architecture & Deployment Modes
+
+The application supports multiple run modes depending on your scale and learning path:
+
+### 1. Monolithic Mode (2-Tier Local Development)
+FastAPI serves the static assets directly and handles JSON API endpoints locally, writing to a single, file-based SQLite database (`ottoke.db`).
+
+### 2. Orchestrated Mode (3-Tier Docker Compose)
+Decouples the frontend static server, backend application logic, and storage. Uses **Nginx** for frontend delivery and reverse proxying, **FastAPI** for core logic, **PostgreSQL** for relational storage, and **Redis** for state caching/rate limiting.
+
+### 3. Cloud-Native Mode (Kubernetes, Helm, & ArgoCD)
+Production-grade deployment orchestrated inside a Kubernetes cluster (e.g., **Kind**, **Minikube**). Implements **StatefulSets** with Persistent Volume Claims (PVC) for database storage, Ingress controllers for path-based routing, Helm Charts for configuration packaging, and **ArgoCD** for automated continuous deployment (GitOps).
 
 ```mermaid
 graph TD
     User([User Browser]) -->|HTTP / HTTPS| Ingress[K8s Ingress Controller / Nginx]
     
-    Ingress -->|Path: /*| Frontend[Frontend Service: Nginx Container]
+    Ingress -->|Path: /| Frontend[Frontend Service: Nginx Container]
     Ingress -->|Path: /api/*| Backend[Backend Service: FastAPI Container]
     
-    Backend -->|Read/Write| Postgres[(Database: PostgreSQL Container)]
-    Backend -->|Caching & Rate Limits| Redis[(Cache: Redis Container)]
+    Backend -->|Read/Write| Postgres[(Database: PostgreSQL StatefulSet)]
+    Backend -->|Caching & Rate Limits| Redis[(Cache: Redis Deployment)]
 ```
-
-### Component Breakdown
-*   **Frontend (Presentation Tier)**: Decoupled `nginxinc/nginx-unprivileged` container serving static HTML, CSS, and JS files, and proxying backend queries. Runs under an unprivileged user listening on port `8080`.
-*   **Backend (Application Logic Tier)**: FastAPI application running in a hardened non-root container, returning JSON API endpoints.
-*   **Database (Data Tier)**: PostgreSQL in containerized/production setups, or a local SQLite (`ottoke.db`) file.
-*   **Cache**: Redis cache instance to manage atomic, time-windowed IP rate limits.
-
-## Security Features
-- **SQL Injection Prevention:** Strict use of parameterized queries (`?` or `%s`) via sqlite/psycopg2.
-- **XSS Prevention:** Frontend text escaping using client-side DOM assignments and backend `html.escape` sterilizations.
-- **Rate Limiting:** Lightweight custom rate limiter. Uses atomic Redis caches when available (falling back to database logs), allowing maximum 5 confession submissions, 10 votes, and 10 comments per IP per hour.
-- **Session Tracking:** Unique session hashes enforced using `IP + User-Agent + salt`.
-- **CORS Protection:** Enforces dynamic `ALLOWED_ORIGINS` setup via backend configuration.
 
 ---
 
-## Local Development
+## 🔒 Security Hardening
 
-You can run this project locally using either **Docker Compose (Recommended)** or **Native Python (SQLite)**.
+Ottoke is built with security-first design patterns:
+*   **SQL Injection Prevention**: Absolute separation of queries and data via parameterized inputs using Python DB-APIs (`%s` for PostgreSQL, `?` for SQLite).
+*   **Cross-Site Scripting (XSS) Prevention**: Frontend input sanitization, safe client-side DOM assignments (`textContent` instead of `innerHTML`), and backend output sterilization (`html.escape`).
+*   **Memory-based Rate Limiting**: Time-windowed IP rate limits (5 submissions, 10 votes, 10 comments per hour) managed atomically using high-speed Redis memory keys, preventing database DDoS attacks.
+*   **Unprivileged Containers**: Frontend and Backend Dockerfiles utilize system users (`nginx` / `appuser`) rather than root, minimizing the potential impact of container breakout attacks.
+
+---
+
+## 🚀 Local Development Quickstart
+
+Ensure you have [Git](https://git-scm.com/) and [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed.
 
 ### Option A: Running with Docker Compose (3-Tier PostgreSQL + Redis)
-This matches the production-grade multi-container environment:
+*This is the recommended local dev setup, matching the production environment architecture.*
 
-1. **Clone the repository**.
-2. **Environment Variables**: Create a `.env` file in the root folder (or copy `.env.example`):
-   ```env
-   POSTGRES_USER=ottoke
-   POSTGRES_PASSWORD=ottoke_secure_password
-   POSTGRES_DB=ottoke
-   DATABASE_URL=postgresql://ottoke:ottoke_secure_password@postgres:5432/ottoke
-   REDIS_URL=redis://redis:6379/0
-   ALLOWED_ORIGINS=*
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Hritikraj8804/ottoke.git
+   cd ottoke
    ```
-3. **Run the containers**:
+2. **Configure Environment Variables**:
+   Copy `.env.example` into a new `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+   Modify values if needed (the defaults work out of the box).
+3. **Build & Spin Up**:
    ```bash
    docker compose up --build
    ```
-4. **Access the application** at 👉 **[http://localhost:8000](http://localhost:8000)**.
-5. **Inspect Redis Cache**:
-   ```bash
-   docker compose exec redis redis-cli KEYS "*"
-   ```
-6. **Teardown**:
+4. **Access the Web UI**:
+   Open 👉 **[http://localhost:8000](http://localhost:8000)** in your browser.
+5. **Teardown**:
    ```bash
    docker compose down -v
    ```
 
-### Option B: Running Natively (SQLite Dev Mode)
-This runs the app locally without Docker containers:
+### Option B: Running Natively (SQLite Monolith Mode)
+*Best for rapid FastAPI code debugging without running container engines.*
 
-1. **Prerequisites**: Ensure you have Python 3.11+ installed.
-2. **Setup Virtual Environment & Install Dependencies**:
-   *   **On Windows (PowerShell)**:
-       ```powershell
-       .\venv\Scripts\Activate.ps1
-       pip install -r requirements.txt
-       ```
-   *   **On Windows (CMD)**:
-       ```cmd
-       venv\Scripts\activate.bat
-       pip install -r requirements.txt
-       ```
-   *   **On macOS/Linux**:
-       ```bash
-       source venv/bin/activate
-       pip install -r requirements.txt
-       ```
-3. **Environment Variables**: Create a `.env.local` in the root:
-   ```env
-   ALLOWED_ORIGINS=http://localhost:8000
+1. **Setup Python Virtual Environment (Python 3.11+)**:
+   ```bash
+   python -m venv venv
+   # On Windows (PowerShell):
+   .\venv\Scripts\Activate.ps1
+   # On macOS/Linux:
+   source venv/bin/activate
    ```
-4. **Seed Database**: Initialize local SQLite file:
+2. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Initialize the SQLite Database**:
    ```bash
    python scripts/seed_db.py
    ```
-5. **Run the Server**:
+4. **Start the FastAPI Development Server**:
    ```bash
    uvicorn api.index:app --reload
    ```
-6. **Access the application** at 👉 **[http://localhost:8000](http://localhost:8000)**.
+5. **Access the app** at 👉 **[http://localhost:8000](http://localhost:8000)**.
 
 ---
 
-## Deployment
-For Kubernetes orchestration configurations, see the manifests stored in the [k8s/](file:///c:/Users/hriti/project/Ottoke/k8s/) folder. For custom standalone Python hostings, run Uvicorn targeting `api.index:app`.
+## ☸️ Kubernetes & GitOps Deployment
 
-## Easter Eggs 🐣
-- **Konami Code:** Have your keyboard ready on the Feed or Leaderboard! Tap `Up Up Down Down Left Right Left Right B A` to enter *K-drama Mode*, overriding the confession titles!
-- **Secret 3:33 PM rating message:** Rate any confession at exactly 3:33 PM local time to receive the blessing of the drama gods.
+For production deployments, the application manifests are organized for Kubernetes.
 
-## License
-MIT License
+### Local Kubernetes Cluster Setup (Kind)
+To spin up a local Kubernetes cluster optimized for this project:
+
+1. **Create Kind Cluster with Port Mappings**:
+   ```bash
+   kind create cluster --name ottoke --config k8s/kind-config.yaml
+   ```
+2. **Deploy Nginx Ingress Controller**:
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+   ```
+3. **Verify Cluster Readiness**:
+   ```bash
+   kubectl get pods -n ingress-nginx
+   ```
+
+### Option C: Raw Manifests Deployment
+Apply all configurations in the `k8s/` folder:
+```bash
+kubectl apply -f k8s/
+```
+Once healthy, navigate directly to **`http://localhost/`** (routed through Ingress host mappings).
+
+### Option D: Helm Chart Deployment
+The project contains a customizable Helm Chart located in `helm/ottoke/`.
+
+1. **Dry-run & Template Rendering**:
+   ```bash
+   helm template ottoke ./helm/ottoke -f ./helm/ottoke/values.yaml
+   ```
+2. **Install the Chart**:
+   ```bash
+   helm install ottoke ./helm/ottoke -n ottoke --create-namespace
+   ```
+3. **Upgrade Releases**:
+   ```bash
+   helm upgrade ottoke ./helm/ottoke -n ottoke
+   ```
+
+### Option E: GitOps Automation (ArgoCD)
+With GitOps, cluster synchronization is fully declared via Git.
+
+1. **Install ArgoCD**:
+   ```bash
+   kubectl create namespace argocd
+   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+   ```
+2. **Deploy the GitOps Application controller**:
+   ```bash
+   kubectl apply -f argocd-app.yaml
+   ```
+3. ArgoCD will track the `main` branch of this repository and automatically sync PostgreSQL StatefulSets, Redis Deployments, Nginx Frontend servers, and routing rules in the `ottoke` namespace.
+
+---
+
+## 🐣 Easter Eggs
+
+*   **Konami Code**: Go to the Feed or Leaderboard pages, and type `Up Up Down Down Left Right Left Right B A` on your keyboard to toggle **K-Drama Mode**!
+*   **The 3:33 Blessing**: Submitting a rating at exactly 3:33 PM local time unlocks a special blessing from the drama gods in the console logs.
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions from the community! Whether you are a developer looking to code, a DevOps engineer optimizing the Helm configurations, or a writer improving instructions, check out our **[Contributing Guide](file:///c:/Users/hriti/project/Ottoke/CONTRIBUTING.md)** to get started.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
