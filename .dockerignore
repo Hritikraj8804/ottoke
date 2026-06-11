@@ -1,5 +1,37 @@
-__pycache__
+# Python/Cache files
+__pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Databases
 *.db
+*.sqlite3
+
+# Environment/Secrets
 .env
-.git
+.env.*
+!.env.example
+
+# Version Control
+.git/
+.gitignore
+
+# DevOps configurations (not needed inside backend/frontend application containers)
+docker-compose.yml
+docker-compose.*
+k8s/
+helm/
+
+# Docker build configs
+Dockerfile
+*/Dockerfile
+.dockerignore

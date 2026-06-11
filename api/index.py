@@ -3,6 +3,7 @@ import hashlib
 from typing import Optional
 import sqlite3
 import psycopg2
+import redis
 from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -27,34 +28,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Ottoke API", lifespan=lifespan)
 
-# ─── Static File Serving ────────────────────────────────────────────────────
-
-@app.get("/")
-def serve_index():
-    return FileResponse("frontend/index.html")
-
-@app.get("/submit")
-def serve_submit():
-    return FileResponse("frontend/submit.html")
-
-@app.get("/leaderboard")
-def serve_leaderboard():
-    return FileResponse("frontend/leaderboard.html")
-
-@app.get("/icons/{image_name}")
-def serve_icon(image_name: str):
-    path = f"frontend/icons/{image_name}"
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Icon not found")
-    return FileResponse(path)
-
-@app.get("/post/{id}")
-def serve_post(id: str):
-    return FileResponse("frontend/post.html")
-
-@app.get("/style.css")
-def serve_style():
-    return FileResponse("frontend/style.css")
+# Initialize Redis Client if REDIS_URL is available
+REDIS_URL = os.getenv("REDIS_URL")
+redis_client = None
+if REDIS_URL:
+    try:
+        redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+        # Test connection
+        redis_client.ping()
+        print("🚀 Connected to Redis successfully!")
+    except Exception as e:
+        print(f"⚠️ Failed to connect to Redis: {e}. Falling back to DB-based rate limiter.")
+        redis_client = None
 
 # ─── CORS ───────────────────────────────────────────────────────────────────
 
@@ -140,28 +125,38 @@ def get_session_id(request: Request) -> str:
     return hashlib.sha256(f"{ip}-{user_agent}-ottoke-salt".encode()).hexdigest()
 
 def check_rate_limit(conn, ip_hash: str, action: str, limit: int, hours: int = 1):
-    p = ph()
-    cursor = conn.cursor()
-    interval_sql = f"NOW() - INTERVAL '{hours} hours'" if _use_postgres() else f"datetime('now', '-{hours} hours')"
-    
-    cursor.execute(
-        f"""
-        SELECT COUNT(*) FROM rate_limits 
-        WHERE ip_hash = {p} AND action = {p} 
-        AND created_at >= {interval_sql}
-        """,
-        (ip_hash, action)
-    )
-    row = cursor.fetchone()
-    count = row[0] if isinstance(row, (tuple, list)) else row["count(*)"] if "count(*)" in dict(row) else list(dict(row).values())[0]
-    if count >= limit:
-        raise HTTPException(status_code=429, detail="Too many requests")
+    if redis_client:
+        key = f"rate:{ip_hash}:{action}"
+        current = redis_client.get(key)
+        if current and int(current) >= limit:
+            raise HTTPException(status_code=429, detail="Too many requests")
+        
+        val = redis_client.incr(key)
+        if val == 1:
+            redis_client.expire(key, hours * 3600)
+    else:
+        p = ph()
+        cursor = conn.cursor()
+        interval_sql = f"NOW() - INTERVAL '{hours} hours'" if _use_postgres() else f"datetime('now', '-{hours} hours')"
+        
+        cursor.execute(
+            f"""
+            SELECT COUNT(*) FROM rate_limits 
+            WHERE ip_hash = {p} AND action = {p} 
+            AND created_at >= {interval_sql}
+            """,
+            (ip_hash, action)
+        )
+        row = cursor.fetchone()
+        count = row[0] if isinstance(row, (tuple, list)) else row["count(*)"] if "count(*)" in dict(row) else list(dict(row).values())[0]
+        if count >= limit:
+            raise HTTPException(status_code=429, detail="Too many requests")
 
-    cursor.execute(
-        f"INSERT INTO rate_limits (ip_hash, action) VALUES ({p}, {p})",
-        (ip_hash, action)
-    )
-    conn.commit()
+        cursor.execute(
+            f"INSERT INTO rate_limits (ip_hash, action) VALUES ({p}, {p})",
+            (ip_hash, action)
+        )
+        conn.commit()
 
 # ─── API Endpoints ───────────────────────────────────────────────────────────
 
