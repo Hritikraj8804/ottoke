@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: ottoke.local
+    - host: localhost
       http:
         paths:
           - path: /api
