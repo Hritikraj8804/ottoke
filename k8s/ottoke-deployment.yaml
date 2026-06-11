@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ottoke-app
+  name: ottoke-backend
   namespace: ottoke
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: ottoke
+      app: ottoke-backend
   template:
     metadata:
       labels:
-        app: ottoke
+        app: ottoke-backend
     spec:
       initContainers:
         - name: db-init
-          image: hritikraj8804/ottoke-app:v4
+          image: hritikraj8804/ottoke-backend:latest
           command: ['python', 'scripts/seed_db.py']
           env:
             - name: DATABASE_URL
@@ -24,8 +24,8 @@ spec:
                   name: ottoke-db-secrets
                   key: DATABASE_URL
       containers:
-        - name: ottoke
-          image: hritikraj8804/ottoke-app:v4
+        - name: backend
+          image: hritikraj8804/ottoke-backend:latest
           env:
             - name: ALLOWED_ORIGINS
               value: "*"
@@ -34,5 +34,7 @@ spec:
                 secretKeyRef:
                   name: ottoke-db-secrets
                   key: DATABASE_URL
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
           ports:
             - containerPort: 8000

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ottoke.fullname" . }}-frontend
+  labels:
+    {{- include "ottoke.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.frontend.service.port }}
+      targetPort: 8080
+      name: http
+  selector:
+    app: {{ include "ottoke.fullname" . }}-frontend
