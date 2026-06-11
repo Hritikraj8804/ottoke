@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/Hritikraj8804/ottoke.git'
-    targetRevision: feature/postgres-persistence
+    targetRevision: main
     path: k8s
   destination:
     server: 'https://kubernetes.default.svc'
