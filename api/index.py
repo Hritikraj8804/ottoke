@@ -10,13 +10,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
+from contextlib import asynccontextmanager
+import scripts.seed_db
+
 # Load env: .env.production takes priority, else .env.local
 if os.path.exists(".env.production"):
     load_dotenv(".env.production")
 else:
     load_dotenv(".env.local")
 
-app = FastAPI(title="Ottoke API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # App startup: Initialize the DB and wait for PG connection
+    scripts.seed_db.init_db()
+    yield
+
+app = FastAPI(title="Ottoke API", lifespan=lifespan)
 
 # ─── Static File Serving ────────────────────────────────────────────────────
 
@@ -133,13 +142,15 @@ def get_session_id(request: Request) -> str:
 def check_rate_limit(conn, ip_hash: str, action: str, limit: int, hours: int = 1):
     p = ph()
     cursor = conn.cursor()
+    interval_sql = f"NOW() - INTERVAL '{hours} hours'" if _use_postgres() else f"datetime('now', '-{hours} hours')"
+    
     cursor.execute(
         f"""
         SELECT COUNT(*) FROM rate_limits 
         WHERE ip_hash = {p} AND action = {p} 
-        AND created_at >= datetime('now', '-' || {p} || ' hours')
+        AND created_at >= {interval_sql}
         """,
-        (ip_hash, action, hours)
+        (ip_hash, action)
     )
     row = cursor.fetchone()
     count = row[0] if isinstance(row, (tuple, list)) else row["count(*)"] if "count(*)" in dict(row) else list(dict(row).values())[0]
@@ -163,7 +174,7 @@ def list_confessions(page: int = 1):
     cursor.execute(f"""
         SELECT id, content, avg_rating, rating_count, comment_count, created_at 
         FROM confessions 
-        WHERE is_deleted = 0
+        WHERE is_deleted = FALSE
         ORDER BY created_at DESC 
         LIMIT 20 OFFSET {p}
     """, (offset,))
@@ -176,7 +187,7 @@ def get_confession(conf_id: int):
     p = ph()
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM confessions WHERE id = {p} AND is_deleted = 0", (conf_id,))
+    cursor.execute(f"SELECT * FROM confessions WHERE id = {p} AND is_deleted = FALSE", (conf_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -227,7 +238,7 @@ def vote_confession(conf_id: int, payload: VoteSubmit, request: Request):
         session_id = get_session_id(request)
 
         cursor = conn.cursor()
-        cursor.execute(f"SELECT id FROM confessions WHERE id = {p} AND is_deleted = 0", (conf_id,))
+        cursor.execute(f"SELECT id FROM confessions WHERE id = {p} AND is_deleted = FALSE", (conf_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Confession not found")
 
@@ -269,7 +280,7 @@ def add_comment(payload: CommentSubmit, request: Request):
         session_id = get_session_id(request)
 
         cursor = conn.cursor()
-        cursor.execute(f"SELECT id FROM confessions WHERE id = {p} AND is_deleted = 0", (payload.confession_id,))
+        cursor.execute(f"SELECT id FROM confessions WHERE id = {p} AND is_deleted = FALSE", (payload.confession_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Confession not found")
 
@@ -296,10 +307,11 @@ def get_leaderboard(timeframe: str = Query("all")):
         SELECT id, content, (rating_sum * 1.0 / rating_count) as avg_rating, 
                comment_count, rating_count
         FROM confessions
-        WHERE is_deleted = 0 AND rating_count > 0
+        WHERE is_deleted = FALSE AND rating_count > 0
     """
     if timeframe == "week":
-        query += " AND created_at >= datetime('now', '-7 days') "
+        interval_sql = "NOW() - INTERVAL '7 days'" if _use_postgres() else "datetime('now', '-7 days')"
+        query += f" AND created_at >= {interval_sql} "
 
     query += " ORDER BY avg_rating DESC, rating_count DESC LIMIT 10"
     cursor.execute(query)
@@ -317,7 +329,8 @@ def get_daily_quote():
     row = cursor.fetchone()
 
     if not row:
-        cursor.execute("UPDATE daily_quotes SET used_at = NULL WHERE used_at = date('now', '-1 day')")
+        interval_sql = "CURRENT_DATE - INTERVAL '1 day'" if _use_postgres() else "date('now', '-1 day')"
+        cursor.execute(f"UPDATE daily_quotes SET used_at = NULL WHERE used_at = {interval_sql}")
         cursor.execute("SELECT id, quote, source, type FROM daily_quotes WHERE used_at IS NULL ORDER BY RANDOM() LIMIT 1")
         row = cursor.fetchone()
 

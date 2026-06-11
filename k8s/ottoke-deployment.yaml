@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ottoke-app
+  namespace: ottoke
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ottoke
+  template:
+    metadata:
+      labels:
+        app: ottoke
+    spec:
+      initContainers:
+        - name: db-init
+          image: hritikraj8804/ottoke-app:v4
+          command: ['python', 'scripts/seed_db.py']
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ottoke-db-secrets
+                  key: DATABASE_URL
+      containers:
+        - name: ottoke
+          image: hritikraj8804/ottoke-app:v4
+          env:
+            - name: ALLOWED_ORIGINS
+              value: "*"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ottoke-db-secrets
+                  key: DATABASE_URL
+          ports:
+            - containerPort: 8000
